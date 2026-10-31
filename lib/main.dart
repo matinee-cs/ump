@@ -309,9 +309,12 @@ class TrackTile extends StatelessWidget {
 
 // ───────────── HOME ─────────────
 const shelfDefs = {
+  'Latest Hindi songs': 'latest hindi songs 2026',
+  'Latest Punjabi songs': 'latest punjabi songs 2026',
+  'Haryanvi hits': 'latest haryanvi songs 2026',
+  'Punjabi hits': 'new punjabi song',
+  'New Haryanvi': 'new haryanvi song',
   'Trending now': 'trending songs',
-  'Hindi hits': 'latest hindi songs',
-  'Punjabi': 'new punjabi songs',
   'English pop': 'top english pop hits',
   'Lo-fi chill': 'lofi chill beats',
 };
@@ -340,6 +343,10 @@ class HomeTab extends StatelessWidget {
             ]),
           ),
           if (store.recents.isNotEmpty) Shelf('Pick up where you left off', store.recents),
+          FutureBuilder<List<Track>>(
+            future: store.recommended(),
+            builder: (_, s) => (s.hasData && s.data!.isNotEmpty) ? Shelf('Recommended for you', s.data!) : const SizedBox(),
+          ),
           for (final e in shelfDefs.entries)
             FutureBuilder<List<Track>>(
               future: store.shelf(e.value),

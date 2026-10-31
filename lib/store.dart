@@ -69,6 +69,37 @@ class Store extends ChangeNotifier {
     }
   }
 
+  // ── recommendations (based on what you liked / played) ──
+  final Map<String, List<Track>> _recCache = {};
+
+  String _clean(String t) => t
+      .replaceAll(RegExp(r'\(.*?\)|\[.*?\]|official|video|lyrical|lyrics|audio|hd|4k|\|.*', caseSensitive: false), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+
+  Future<List<Track>> recommended() async {
+    final seeds = <Track>[];
+    for (final t in [...recents.take(3), ...liked.take(3)]) {
+      if (!seeds.any((s) => s.id == t.id)) seeds.add(t);
+    }
+    if (seeds.isEmpty) return [];
+    final use = seeds.take(3).toList();
+    final key = use.map((e) => e.id).join(',');
+    if (_recCache[key] != null) return _recCache[key]!;
+    final seen = {...recents.map((e) => e.id), ...liked.map((e) => e.id)};
+    final out = <Track>[];
+    for (final s in use) {
+      try {
+        final r = await search('${_clean(s.title)} similar songs');
+        for (final t in r) {
+          if (!seen.contains(t.id) && !out.any((o) => o.id == t.id)) out.add(t);
+        }
+      } catch (_) {}
+    }
+    out.shuffle();
+    return _recCache[key] = out.take(20).toList();
+  }
+
   Future<List<Track>> trending() => shelf('trending songs');
 
   void addHistory(String q) {
