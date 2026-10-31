@@ -11,6 +11,10 @@ import 'models.dart';
 final yt = YoutubeExplode();
 final store = Store();
 
+/// Picks the highest-bitrate audio stream (works with youtube_explode_dart 2.5+).
+AudioOnlyStreamInfo bestAudio(StreamManifest m) =>
+    m.audioOnly.reduce((a, b) => a.bitrate.bitsPerSecond >= b.bitrate.bitsPerSecond ? a : b);
+
 /// Everything saved on the phone: likes, playlists, history, downloads, settings.
 class Store extends ChangeNotifier {
   late SharedPreferences _sp;
@@ -164,7 +168,7 @@ class Store extends ChangeNotifier {
     notifyListeners();
     try {
       final m = await yt.videos.streamsClient.getManifest(t.id);
-      final info = m.audioOnly.withHighestBitrate();
+      final info = bestAudio(m);
       final dir = await getApplicationDocumentsDirectory();
       final file = File('${dir.path}/${t.id}.${info.container.name}');
       final sink = file.openWrite();

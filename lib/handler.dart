@@ -90,7 +90,7 @@ class WeedHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       return;
     }
     final m = await yt.videos.streamsClient.getManifest(t.id);
-    await p.setUrl(m.audioOnly.withHighestBitrate().url.toString());
+    await p.setUrl(bestAudio(m).url.toString());
   }
 
   Future<void> _playAt(int i) async {
