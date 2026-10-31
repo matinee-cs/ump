@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 
 import 'models.dart';
+import 'resolver.dart';
 import 'store.dart';
 
 /// Audio brain: background play, notification, Android Auto, crossfade,
@@ -30,6 +31,7 @@ class WeedHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   final List<StreamSubscription> _subs = [];
 
   final ValueNotifier<DateTime?> sleepEnd = ValueNotifier(null);
+  final ValueNotifier<String?> lastError = ValueNotifier(null);
   final Map<int, double> gains = {};
   bool eqOn = false;
 
@@ -89,8 +91,7 @@ class WeedHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       await p.setFilePath(f);
       return;
     }
-    final m = await yt.videos.streamsClient.getManifest(t.id);
-    await p.setUrl(bestAudio(m).url.toString());
+    await loadInto(p, t.id);
   }
 
   Future<void> _playAt(int i) async {
@@ -112,10 +113,13 @@ class WeedHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       _p.play();
       _errors = 0;
       store.addRecent(Track.fromItem(item));
-    } catch (_) {
+    } catch (e) {
       loading = false;
       _broadcast();
-      if (_errors++ < 3 && i + 1 < q.length) return _playAt(i + 1);
+      lastError.value = null;
+      lastError.value = e.toString();
+      if (_errors++ < 1 && i + 1 < q.length) return _playAt(i + 1);
+      _errors = 0;
       return;
     }
     loading = false;

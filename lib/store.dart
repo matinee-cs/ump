@@ -4,16 +4,12 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:youtube_explode_dart/youtube_explode_dart.dart';
+import 'package:http/http.dart' as http;
 
 import 'models.dart';
+import 'resolver.dart';
 
-final yt = YoutubeExplode();
 final store = Store();
-
-/// Picks the highest-bitrate audio stream (works with youtube_explode_dart 2.5+).
-AudioOnlyStreamInfo bestAudio(StreamManifest m) =>
-    m.audioOnly.reduce((a, b) => a.bitrate.bitsPerSecond >= b.bitrate.bitsPerSecond ? a : b);
 
 /// Everything saved on the phone: likes, playlists, history, downloads, settings.
 class Store extends ChangeNotifier {
@@ -167,20 +163,43 @@ class Store extends ChangeNotifier {
     progress[t.id] = 0;
     notifyListeners();
     try {
-      final m = await yt.videos.streamsClient.getManifest(t.id);
-      final info = bestAudio(m);
+      ResolvedStream? s;
+      for (final c in kProfiles) {
+        try {
+          s = await resolveWith(c, t.id);
+          break;
+        } catch (_) {}
+      }
+      s ??= await resolveExplode(t.id);
       final dir = await getApplicationDocumentsDirectory();
-      final file = File('${dir.path}/${t.id}.${info.container.name}');
+      final file = File('${dir.path}/${t.id}.${s.mime.contains('webm') ? 'webm' : 'm4a'}');
       final sink = file.openWrite();
-      final total = info.size.totalBytes;
+      final total = s.length ?? 0;
+      final client = http.Client();
       var got = 0, lastTick = 0;
-      await for (final chunk in yt.videos.streamsClient.get(info)) {
-        sink.add(chunk);
-        got += chunk.length;
-        if (got - lastTick > total / 50) {
-          lastTick = got;
-          progress[t.id] = got / total;
-          notifyListeners();
+      const chunk = 1024 * 1024;
+      if (total > 0) {
+        for (var start = 0; start < total; start += chunk) {
+          final end = (start + chunk < total ? start + chunk : total) - 1;
+          final req = http.Request('GET', Uri.parse(s.url))
+            ..headers.addAll(s.headers)
+            ..headers['Range'] = 'bytes=$start-$end';
+          final resp = await client.send(req);
+          if (resp.statusCode != 200 && resp.statusCode != 206) throw Exception('HTTP ${resp.statusCode}');
+          await for (final c in resp.stream) {
+            sink.add(c);
+            got += c.length;
+            if (got - lastTick > total / 50) {
+              lastTick = got;
+              progress[t.id] = got / total;
+              notifyListeners();
+            }
+          }
+        }
+      } else {
+        final resp = await client.send(http.Request('GET', Uri.parse(s.url))..headers.addAll(s.headers));
+        await for (final c in resp.stream) {
+          sink.add(c);
         }
       }
       await sink.flush();
